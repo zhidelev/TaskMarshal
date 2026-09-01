@@ -51,6 +51,29 @@ def test_checker_rejects_prohibited_domain_imports(tmp_path: Path, module: str) 
     assert f"prohibited domain dependency {module}" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("statement", "resolved_module"),
+    [
+        ("from google import genai", "google.genai"),
+        ("from google import genai as provider", "google.genai"),
+        ("from azure.ai import inference", "azure.ai.inference"),
+        ("from taskmarshal import persistence", "taskmarshal.persistence"),
+        ("from google import *", "google.*"),
+    ],
+)
+def test_checker_reconstructs_nested_from_imports(
+    tmp_path: Path, statement: str, resolved_module: str
+) -> None:
+    domain = tmp_path / "domain"
+    domain.mkdir()
+    (domain / "policy.py").write_text(f"{statement}\n")
+
+    result = run_checker(domain)
+
+    assert result.returncode == 1
+    assert f"prohibited domain dependency {resolved_module}" in result.stderr
+
+
 def test_checker_matches_module_boundaries_not_similar_names(tmp_path: Path) -> None:
     domain = tmp_path / "domain"
     domain.mkdir()

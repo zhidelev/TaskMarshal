@@ -48,11 +48,17 @@ def imported_modules(tree: ast.AST) -> list[tuple[str, int]]:
         if isinstance(node, ast.Import):
             imports.extend((alias.name, node.lineno) for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
-            imports.append((node.module, node.lineno))
+            imports.extend((f"{node.module}.{alias.name}", node.lineno) for alias in node.names)
     return imports
 
 
 def is_forbidden(module: str) -> bool:
+    if module.endswith(".*"):
+        namespace = module.removesuffix(".*")
+        return any(
+            prefix == namespace or prefix.startswith(f"{namespace}.")
+            for prefix in FORBIDDEN_PREFIXES
+        )
     matches_forbidden_prefix = (
         module == prefix or module.startswith(f"{prefix}.") for prefix in FORBIDDEN_PREFIXES
     )
