@@ -194,7 +194,7 @@ async def validation_error_handler(request: Request, error: RequestValidationErr
     details = [
         {
             "code": str(issue.get("type", "request.invalid_value")),
-            "location": [part for part in issue.get("loc", ()) if isinstance(part, (str, int))],
+            "location": [part for part in issue.get("loc", ()) if isinstance(part, str | int)],
         }
         for issue in error.errors()
     ]
