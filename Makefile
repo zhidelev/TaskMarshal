@@ -16,8 +16,8 @@ test:
 	uv run pytest --cov=taskmarshal --cov-report=term-missing --cov-report=xml
 
 lint:
-	uv run ruff check backend worker tests scripts
-	uv run ruff format --check backend worker tests scripts
+	uv run ruff check backend worker migrations tests scripts
+	uv run ruff format --check backend worker migrations tests scripts
 	cd frontend && npm run lint
 
 typecheck:

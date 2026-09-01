@@ -228,19 +228,8 @@ export function App() {
     }, "Authoritative edit saved as a new specification version.");
   }
 
-  const activeAttemptCount =
-    selected?.attempts.filter((attempt) => ["starting", "running"].includes(attempt.status))
-      .length ?? 0;
-  const selectedConfiguration = configurations.find(
-    (configuration) =>
-      configuration.id === selected?.current_specification?.actor_configuration_id,
-  );
-  const concurrencyExhausted =
-    selectedConfiguration !== undefined &&
-    activeAttemptCount >= selectedConfiguration.max_concurrency;
-
   function startAttempt() {
-    if (!selected || !readiness?.ready || concurrencyExhausted) return;
+    if (!selected || !readiness?.ready) return;
     void run(async () => {
       const attempt = await api.start<Attempt>(selected.task.id);
       setNotice(`Attempt ${attempt.id.slice(0, 8)} started; task remains distinct.`);
@@ -298,7 +287,7 @@ export function App() {
                   <div className="gate-head"><strong>Readiness gate</strong><span>{readiness.satisfied}/{readiness.total}</span></div>
                   <div className="meter"><i style={{ width: `${(readiness.satisfied / readiness.total) * 100}%` }} /></div>
                   <ul>{readiness.requirements.map((item) => <li key={item.code} className={item.satisfied ? "pass" : "fail"}><span>{item.satisfied ? "✓" : "×"}</span><div><code>{item.code}</code>{!item.satisfied && <small>{item.remediation}</small>}</div></li>)}</ul>
-                  <button className="primary full" disabled={!readiness.ready || concurrencyExhausted || busy} onClick={startAttempt}>{concurrencyExhausted ? "Actor concurrency exhausted" : "Start manual attempt"}</button>
+                  <button className="primary full" disabled={!readiness.ready || busy} onClick={startAttempt}>Start manual attempt</button>
                 </div>}
                 <div className="attempts"><h3>Attempts <span>{selected.attempts.length}</span></h3>{selected.attempts.length === 0 ? <p>No attempts. Readiness must pass first.</p> : selected.attempts.map((attempt) => <div className="attempt" key={attempt.id}><div><code>{attempt.id.slice(0, 12)}</code><small>input {attempt.input_state_id.slice(0, 10)} · epoch {attempt.ownership_epoch}</small></div><Status value={attempt.status} /></div>)}</div>
                 {selected.current_specification && <details className="version-editor"><summary>Create next specification version</summary><form onSubmit={versionTask}>
