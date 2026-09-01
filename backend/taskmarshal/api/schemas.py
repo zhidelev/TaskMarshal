@@ -202,6 +202,7 @@ class ErrorBody(BaseModel):
     code: str
     message: str
     details: list[dict[str, Any]] = Field(default_factory=list)
+    correlation_id: str
 
 
 class ErrorEnvelope(BaseModel):

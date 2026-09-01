@@ -24,7 +24,7 @@ Create a Task without a specification and POST its attempts endpoint. It must re
 ## Troubleshooting
 
 - `docker compose ps` distinguishes dependency startup from ready applications.
-- `docker compose logs api worker temporal db` shows structured API operations and dependency state. Credential values are never logged by application code.
+- `docker compose logs api worker temporal db` shows structured API operations and dependency state. Match the `X-Correlation-ID` response header or `error.correlation_id` value to the `correlation_id` log field. Credential values and submitted prompt content are never logged by application code.
 - If a migration is missing, `uv run alembic check` exits non-zero.
 - If domain code imports infrastructure, `make dependency-check` names the file, line, and prohibited module.
 - Use `make down` for normal shutdown. Use `docker compose down --volumes` only when intentionally discarding local database state.

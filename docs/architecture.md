@@ -24,6 +24,6 @@ The control plane owns Tasks, immutable specification/configuration versions, re
 
 ## Failure semantics
 
-Readiness and adapter validation fail closed. API failures use `{ "error": { "code", "message", "details" } }`. Operations emit structured start/success/failure logs with stable reason codes, duration, and `work_id`/`attempt_id` when applicable. Consequential lifecycle events also receive immutable UUID identities in `domain_events`.
+Readiness and adapter validation fail closed. API failures use `{ "error": { "code", "message", "details", "correlation_id" } }`. A validated `X-Correlation-ID` is propagated through response headers, errors, and structured request/operation logs. Validation failures expose schema locations but redact submitted values. Operations emit structured start/success/failure logs with stable reason codes, duration, and `work_id`/`attempt_id` when applicable. Consequential lifecycle events also receive immutable UUID identities in `domain_events`.
 
 See ADRs [0001](adr/0001-modular-monolith-and-ports.md), [0002](adr/0002-control-plane-authority.md), and [0003](adr/0003-versioned-input-state.md).

@@ -16,3 +16,10 @@ Generated and interactive OpenAPI is available at `/docs`; the raw schema is `/o
 | POST | `/tasks/{work_id}/attempts` | Re-evaluate readiness and manually start an attempt |
 
 An unready start returns HTTP 409 with code `task.not_ready`; `details` contains every failed readiness requirement. Constraint conflicts return `persistence.constraint_violation`. Credentials are represented only by references such as `vault://github/taskmarshal`.
+
+Every request receives a canonical UUID correlation identifier. Clients may supply one in
+`X-Correlation-ID`; missing or malformed values are replaced. The identifier is returned in the
+same response header, included as `error.correlation_id` in every error envelope, and attached to
+structured request and operation logs. Validation responses use the stable
+`request.validation_failed` code and report only error types and schema locations—submitted values,
+credentials, and prompt or instruction content are never copied into errors or logs.

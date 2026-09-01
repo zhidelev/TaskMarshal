@@ -13,6 +13,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from taskmarshal.api.correlation import correlation_id_context
 from taskmarshal.api.errors import DomainError
 from taskmarshal.api.schemas import (
     AgentConfigurationCreate,
@@ -47,7 +48,12 @@ def observed_operation(
     attempt_id: str | None = None,
 ) -> Iterator[None]:
     started = time.monotonic()
-    common = {"operation": operation, "work_id": work_id, "attempt_id": attempt_id}
+    common = {
+        "correlation_id": correlation_id_context.get(),
+        "operation": operation,
+        "work_id": work_id,
+        "attempt_id": attempt_id,
+    }
     logger.info("operation.start", extra={**common, "reason_code": "operation.started"})
     try:
         yield
