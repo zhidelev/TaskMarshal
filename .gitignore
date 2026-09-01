@@ -209,6 +209,15 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# TaskMarshal local/build artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+taskmarshal.db
+migration-check.db
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
@@ -216,3 +225,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+coverage.xml
+.pytest_cache/
