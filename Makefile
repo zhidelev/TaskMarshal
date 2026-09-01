@@ -1,4 +1,4 @@
-.PHONY: dev down logs migrate test lint typecheck check smoke dependency-check
+.PHONY: dev down logs migrate worker test lint typecheck check smoke dependency-check
 
 dev:
 	docker compose up --build --wait
@@ -11,6 +11,9 @@ logs:
 
 migrate:
 	uv run alembic upgrade head
+
+worker:
+	uv run python -m worker.main
 
 test:
 	uv run pytest --cov=taskmarshal --cov-report=term-missing --cov-report=xml

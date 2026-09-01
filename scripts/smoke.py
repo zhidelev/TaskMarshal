@@ -20,7 +20,10 @@ def call(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     )
     try:
         with urlopen(request, timeout=10) as response:
-            return json.load(response)
+            payload: object = json.load(response)
+            if not isinstance(payload, dict):
+                raise RuntimeError(f"{path} returned a non-object JSON response")
+            return payload
     except HTTPError as error:
         raise RuntimeError(f"{path} returned {error.code}: {error.read().decode()}") from error
 

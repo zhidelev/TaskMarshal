@@ -49,7 +49,7 @@ extend-immutable-calls = ["fastapi.Depends"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-packages = ["taskmarshal"]
+files = ["backend", "worker", "scripts"]
 mypy_path = "backend"
 plugins = ["pydantic.mypy"]
 
