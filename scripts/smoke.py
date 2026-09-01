@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, cast
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -20,7 +20,10 @@ def call(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     )
     try:
         with urlopen(request, timeout=10) as response:
-            return json.load(response)
+            payload: object = json.load(response)
+            if not isinstance(payload, dict) or not all(isinstance(key, str) for key in payload):
+                raise RuntimeError(f"{path} returned an invalid JSON object")
+            return cast(dict[str, Any], payload)
     except HTTPError as error:
         raise RuntimeError(f"{path} returned {error.code}: {error.read().decode()}") from error
 

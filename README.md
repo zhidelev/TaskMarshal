@@ -38,12 +38,16 @@ uv sync --frozen --extra dev
 uv run alembic upgrade head
 uv run uvicorn taskmarshal.api.main:app --reload
 
+# In a second terminal, with Temporal available at localhost:7233:
+uv sync --frozen --extra worker
+uv run python -m worker.main
+
 cd frontend
 npm ci
 npm run dev
 ```
 
-Install the optional Temporal SDK with `uv sync --frozen --extra worker` when running the worker outside Docker. The Docker worker installs it automatically.
+The Docker worker installs the optional Temporal SDK automatically.
 
 SQLite is the safe backend default when `DATABASE_URL` is absent. Docker Compose and deployment paths use Postgres.
 

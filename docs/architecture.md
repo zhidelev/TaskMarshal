@@ -8,7 +8,7 @@ React UI → FastAPI/API service → domain policies and ports
 Adapters (PydanticAI, Temporal, sandbox) → domain ports
 ```
 
-The domain package imports neither FastAPI/SQLAlchemy nor Temporal, Docker, GitHub, PydanticAI, or model-provider types. `scripts/check_dependencies.py` makes that constraint executable in CI.
+The domain package imports neither FastAPI/SQLAlchemy nor Temporal, Docker, Git-host, PydanticAI, agent-framework, or model-provider SDK types. `scripts/check_dependencies.py` makes that constraint executable in CI, and unit tests prove representative prohibited imports make the check fail.
 
 ## State ownership
 
