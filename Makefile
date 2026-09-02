@@ -1,19 +1,24 @@
-.PHONY: dev down logs migrate worker test lint typecheck check smoke dependency-check
+.PHONY: dev down status logs migrate worker test lint typecheck check smoke smoke-local dependency-check
+
+COMPOSE ?= docker compose
 
 dev:
-	docker compose up --build --wait
+	$(COMPOSE) up --build --wait --wait-timeout 240
 
 down:
-	docker compose down --remove-orphans
+	$(COMPOSE) down --remove-orphans
+
+status:
+	$(COMPOSE) ps --all
 
 logs:
-	docker compose logs -f api worker frontend
+	$(COMPOSE) logs -f api worker frontend
 
 migrate:
 	uv run alembic upgrade head
 
 worker:
-	uv run python -m worker.main
+	uv run --extra worker python -m worker.main
 
 test:
 	uv run pytest --cov=taskmarshal --cov-report=term-missing --cov-report=xml
@@ -33,4 +38,7 @@ dependency-check:
 check: lint typecheck dependency-check test
 
 smoke:
+	$(COMPOSE) exec -T -e TASKMARSHAL_API_URL=http://api:8000 api python scripts/smoke.py
+
+smoke-local:
 	uv run python scripts/smoke.py

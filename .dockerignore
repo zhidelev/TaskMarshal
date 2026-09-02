@@ -12,3 +12,9 @@ agentboard-github-issues.csv
 agentboard-implementation-backlog.xlsx
 .agentboard-import-map.json
 coverage.xml
+.env
+.env.*
+*.db
+*.db-*
+*.log
+junit.xml

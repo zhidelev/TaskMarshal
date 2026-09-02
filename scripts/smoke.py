@@ -3,35 +3,57 @@ from __future__ import annotations
 import json
 import os
 from typing import Any, cast
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
 BASE_URL = os.getenv("TASKMARSHAL_API_URL", "http://localhost:8000")
 
 
-def call(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def call(
+    path: str, body: dict[str, Any] | None = None, *, expected_status: int | None = None
+) -> dict[str, Any]:
+    correlation_id = str(uuid4())
     data = json.dumps(body).encode() if body is not None else None
     request = Request(
         f"{BASE_URL}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "X-Correlation-ID": correlation_id},
         method="POST" if body is not None else "GET",
     )
     try:
-        with urlopen(request, timeout=10) as response:
-            payload: object = json.load(response)
-            if not isinstance(payload, dict) or not all(isinstance(key, str) for key in payload):
-                raise RuntimeError(f"{path} returned an invalid JSON object")
-            return cast(dict[str, Any], payload)
+        response = urlopen(request, timeout=10)
     except HTTPError as error:
-        raise RuntimeError(f"{path} returned {error.code}: {error.read().decode()}") from error
+        response = error
+    except (URLError, TimeoutError):
+        raise RuntimeError(f"Request failed; correlation_id={correlation_id}") from None
+    with response:
+        if (expected_status is not None and response.status != expected_status) or (
+            expected_status is None and response.status >= 400
+        ):
+            # Never copy an untrusted server/proxy response body into CI logs.
+            raise RuntimeError(
+                f"Unexpected HTTP {response.status}; correlation_id={correlation_id}"
+            )
+        try:
+            payload: object = json.load(response)
+        except (ValueError, UnicodeError):
+            raise RuntimeError(f"Invalid JSON; correlation_id={correlation_id}") from None
+        if not isinstance(payload, dict) or not all(isinstance(key, str) for key in payload):
+            raise RuntimeError(f"Invalid JSON object; correlation_id={correlation_id}")
+        return cast(dict[str, Any], payload)
 
 
 def main() -> None:
     suffix = uuid4().hex[:8]
     assert call("/health/ready")["status"] == "ready"
     project = call("/api/v1/projects", {"name": f"Smoke {suffix}", "description": "CI"})
+    unready = call("/api/v1/tasks", {"project_id": project["id"], "title": "Unready smoke task"})
+    rejected = call(f"/api/v1/tasks/{unready['id']}/attempts", {}, expected_status=409)
+    assert rejected["error"]["code"] == "task.not_ready"
+    assert rejected["error"]["correlation_id"]
+    unchanged = call(f"/api/v1/tasks/{unready['id']}")
+    assert unchanged["task"]["status"] == "draft" and unchanged["attempts"] == []
     repository = call(
         "/api/v1/repositories",
         {

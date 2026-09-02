@@ -15,10 +15,13 @@ An actor may report a candidate. It cannot mark a Task complete. Completion is a
 Prerequisites: Docker Engine with Compose v2 and Make.
 
 ```bash
-cp .env.example .env
 make dev
-make smoke
 ```
+
+`make dev` builds and starts every service, waiting up to four minutes for readiness. No host
+Python, uv, or Node installation is required. Then run `make smoke` to exercise both an unready
+rejection and a successful manual attempt inside the API container. Copy `.env.example` to `.env`
+only if you need to change defaults; the file is not required and is excluded from Docker builds.
 
 The stack waits for dependency health and application readiness before returning:
 
@@ -28,6 +31,10 @@ The stack waits for dependency health and application readiness before returning
 - Postgres: `127.0.0.1:5432` with explicitly local-only defaults
 
 Stop the stack with `make down`. To remove local database state too, run `docker compose down --volumes` intentionally.
+
+All published ports bind to loopback. The checked-in password is a public, local-only example,
+not a secret: never expose this unauthenticated stack or use these values in production. Postgres
+data survives `make down`; worker readiness is ephemeral and has no host or credential mounts.
 
 ## Local development without containers
 
@@ -39,15 +46,16 @@ uv run alembic upgrade head
 uv run uvicorn taskmarshal.api.main:app --reload
 
 # In a second terminal, with Temporal available at localhost:7233:
-uv sync --frozen --extra worker
-uv run python -m worker.main
+make worker
 
 cd frontend
 npm ci
 npm run dev
 ```
 
-The Docker worker installs the optional Temporal SDK automatically.
+The Docker worker installs the optional Temporal SDK automatically. Prefer it on platforms where
+the SDK has no prebuilt wheel; a native installation may additionally require Rust and `protoc`.
+Use `make smoke-local` when testing a host-run API instead of the Compose API.
 
 SQLite is the safe backend default when `DATABASE_URL` is absent. Docker Compose and deployment paths use Postgres.
 
