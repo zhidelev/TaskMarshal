@@ -8,41 +8,114 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TZ: UTC
+  PYTHONHASHSEED: "0"
+
 jobs:
-  backend:
-    runs-on: ubuntu-latest
+  backend-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Start job timer
+        run: echo "CI_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13.7"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        id: uv
         with:
           version: "0.8.13"
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - run: uv sync --frozen --extra dev --extra worker
+      - run: uv run --no-sync ruff check backend worker migrations tests scripts
+      - run: uv run --no-sync ruff format --check backend worker migrations tests scripts
+      - run: uv run --no-sync mypy
+      - run: uv run --no-sync python scripts/check_dependencies.py
+      - name: Check migration history and model drift on a disposable database
+        run: uv run --no-sync python scripts/check_migrations.py
+      - name: Prepare safe job metrics
+        id: reports
+        if: always()
+        run: python scripts/ci_artifacts.py --job backend-static
+        env:
+          CI_JOB_RESULT: ${{ job.status }}
+          CI_CACHE_HIT: ${{ steps.uv.outputs.cache-hit }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && steps.reports.outcome == 'success'
+        with:
+          name: backend-static-reports
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  backend-tests:
+    name: backend-${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            paths: tests/unit
+          - suite: integration
+            paths: tests/integration tests/e2e
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Start job timer
+        run: echo "CI_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13.7"
-      - run: uv sync --frozen --extra dev
-      - run: uv run ruff check backend worker migrations tests scripts
-      - run: uv run ruff format --check backend worker migrations tests scripts
-      - run: uv run mypy
-      - run: uv run python scripts/check_dependencies.py
-      - run: uv run pytest --cov=taskmarshal --cov-report=xml --junitxml=junit.xml
-      - run: uv run alembic upgrade head && uv run alembic check && uv run alembic downgrade base
-        env:
-          DATABASE_URL: sqlite:///./migration-check.db
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        id: uv
         with:
-          name: backend-test-reports
+          version: "0.8.13"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --extra worker
+      - name: Run tests without automatic retries
+        run: >-
+          uv run --no-sync pytest ${{ matrix.paths }}
+          --cov=taskmarshal --cov=worker --cov=scripts --cov-report=xml:coverage.xml
+          --junitxml=junit.xml --show-capture=no --tb=short
+      - name: Prepare allowlisted test reports and metrics
+        id: reports
+        if: always()
+        run: >-
+          python scripts/ci_artifacts.py --job backend-${{ matrix.suite }}
+          --junit junit.xml --coverage coverage.xml
+        env:
+          CI_JOB_RESULT: ${{ job.status }}
+          CI_CACHE_HIT: ${{ steps.uv.outputs.cache-hit }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && steps.reports.outcome == 'success'
+        with:
+          name: backend-${{ matrix.suite }}-reports
+          path: ci-artifacts/
+          if-no-files-found: error
           retention-days: 7
-          path: |
-            coverage.xml
-            junit.xml
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Start job timer
+        run: echo "CI_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        id: node
         with:
           node-version: "22.18.0"
           cache: npm
@@ -51,24 +124,60 @@ jobs:
         working-directory: frontend
       - run: npm run lint
         working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm run test:ci
+        working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - name: Prepare allowlisted test reports and metrics
+        id: reports
+        if: always()
+        run: >-
+          python3 scripts/ci_artifacts.py --job frontend
+          --junit frontend/reports/junit.xml --coverage frontend/coverage/cobertura-coverage.xml
+        env:
+          CI_JOB_RESULT: ${{ job.status }}
+          CI_CACHE_HIT: ${{ steps.node.outputs.cache-hit }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && steps.reports.outcome == 'success'
+        with:
+          name: frontend-reports
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 7
 
+  # Slow, independently visible: builds every image and exercises Postgres/Temporal.
   clean-stack:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Start job timer
+        run: echo "CI_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - run: docker compose config --quiet
       - run: make dev
+      - name: Verify migrated Postgres matches the ORM
+        run: docker compose exec -T api alembic check
       - run: make smoke
-      - if: always()
-        run: docker compose logs --no-color > compose.log
-      - if: always()
-        run: docker compose down --volumes --remove-orphans
-      - uses: actions/upload-artifact@v4
+      - name: Collect ephemeral diagnostics
         if: always()
+        run: docker compose logs --no-color > compose.log
+      - name: Remove test containers and volumes even on failure
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+      - name: Prepare allowlisted events and job metrics
+        id: reports
+        if: always()
+        run: python3 scripts/ci_artifacts.py --job clean-stack --compose compose.log
+        env:
+          CI_JOB_RESULT: ${{ job.status }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && steps.reports.outcome == 'success'
         with:
-          name: compose-logs
-          path: compose.log
+          name: clean-stack-reports
+          path: ci-artifacts/
+          if-no-files-found: error
           retention-days: 7

@@ -62,12 +62,14 @@ SQLite is the safe backend default when `DATABASE_URL` is absent. Docker Compose
 ## Quality gates
 
 ```bash
-make check              # lint, format, typing, import boundaries, tests
-uv run alembic check    # fail when model changes lack a migration
+make check              # lint, format, typing, boundaries, migrations, Python/UI tests
+make migration-check    # disposable database: upgrade/check/downgrade/re-upgrade
 docker compose build    # validate production-shaped images
 ```
 
-CI separates fast backend/frontend checks from the clean-stack end-to-end smoke test and uploads test and Compose logs without credential values.
+CI separates static, unit, integration, and frontend checks from the clean-stack smoke test.
+It uploads allowlisted test/coverage summaries and correlated event/job metrics, never raw reports
+or Compose logs. See [CI quality gates](docs/ci.md) for check names, reproduction, and retention.
 
 ## Repository map
 

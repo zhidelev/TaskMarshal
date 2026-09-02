@@ -210,6 +210,10 @@ tempCodeRunnerFile.py
 .pypirc
 
 # TaskMarshal local/build artifacts
+ci-artifacts/
+frontend/coverage/
+frontend/reports/
+junit.xml
 node_modules/
 dist/
 *.tsbuildinfo

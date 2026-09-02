@@ -4,6 +4,7 @@ import argparse
 import ast
 import sys
 from collections.abc import Sequence
+from importlib.util import resolve_name
 from pathlib import Path
 
 DOMAIN = Path("backend/taskmarshal/domain")
@@ -42,13 +43,14 @@ FORBIDDEN_PREFIXES = (
 )
 
 
-def imported_modules(tree: ast.AST) -> list[tuple[str, int]]:
+def imported_modules(tree: ast.AST, package: str) -> list[tuple[str, int]]:
     imports: list[tuple[str, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.extend((alias.name, node.lineno) for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            imports.extend((f"{node.module}.{alias.name}", node.lineno) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = resolve_name("." * node.level + (node.module or ""), package)
+            imports.extend((f"{module}.{alias.name}", node.lineno) for alias in node.names)
     return imports
 
 
@@ -67,9 +69,18 @@ def is_forbidden(module: str) -> bool:
 
 def find_violations(domain: Path) -> list[str]:
     violations: list[str] = []
-    for path in sorted(domain.rglob("*.py")):
+    paths = sorted(domain.rglob("*.py"))
+    if not paths:
+        return ["Dependency check failed: no domain modules found."]
+    for path in paths:
         tree = ast.parse(path.read_text(), filename=str(path))
-        for module, line in imported_modules(tree):
+        package = ".".join(("taskmarshal", "domain", *path.relative_to(domain).parent.parts))
+        try:
+            imports = imported_modules(tree, package)
+        except ImportError:
+            violations.append(f"{path}: invalid relative domain import")
+            continue
+        for module, line in imports:
             if is_forbidden(module):
                 violations.append(f"{path}:{line}: prohibited domain dependency {module}")
     return violations

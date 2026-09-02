@@ -10,6 +10,12 @@ Adapters (PydanticAI, Temporal, sandbox) → domain ports
 
 The domain package imports neither FastAPI/SQLAlchemy nor Temporal, Docker, Git-host, PydanticAI, agent-framework, or model-provider SDK types. `scripts/check_dependencies.py` makes that constraint executable in CI, and unit tests prove representative prohibited imports make the check fail.
 
+[CI quality gates](ci.md) enforce direct and relative dependency boundaries, deterministic
+migrations, backend/frontend lint and typing, and unit/integration contracts. A separate
+dependency-backed stack job validates containers and Postgres schema readiness. CI artifacts
+use an allowlist and exclude captured prompts, credentials, and raw diagnostics; this does not
+change domain state ownership or the public API.
+
 ## State ownership
 
 The control plane owns Tasks, immutable specification/configuration versions, readiness, attempts, artifacts, evidence, and domain events. An adapter returns structured observations; it does not own Task status. Attempts snapshot configuration and bind to exactly one `(task_specification_id, work_id)` pair through a composite foreign key.
