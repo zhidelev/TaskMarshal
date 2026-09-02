@@ -12,7 +12,7 @@ fixtures, credentials, or private prompts to tests or workflow commands.
 | --- | --- |
 | `backend-static` | Ruff lint/format, strict mypy (including worker SDK types), domain dependency direction, disposable migration upgrade/check/downgrade/re-upgrade/check |
 | `backend-unit` | Domain policies/transitions, worker health, dependency-check rejection, smoke client, artifact privacy tests |
-| `backend-integration` | API/adapter contracts, migration history and failure cases, in-process end-to-end scenario |
+| `backend-integration` | API/adapter contracts and migrated persistence tests on SQLite/Postgres, empty/populated migration round trips and failure cases, in-process end-to-end scenario |
 | `frontend` | ESLint and React hooks rules, TypeScript, Vitest UI/API tests with coverage, production build |
 | `clean-stack` | Build API/worker/UI images, start Postgres/Temporal and applications, wait for readiness, check Postgres model drift, smoke test, tear down |
 
@@ -40,6 +40,12 @@ The integration suite checks populated rollback and deterministic revisions. Neg
 unapplied revisions and ORM changes without a revision are rejected by Alembic. Domain import
 tests exercise direct, nested, wildcard, and relative prohibited imports; an empty/missing domain
 directory fails closed. Stack verification also checks the schema against actual Postgres.
+
+The integration job provisions Postgres 17.6 and passes `--postgres-url` to pytest. Each database
+test uses a disposable UUID-named schema, removed in fixture cleanup. Without that option, local
+Postgres cases are explicitly skipped while SQLite cases still run. Runtime test fixtures apply
+the actual migration history, including immutable-history triggers. See the
+[runbook](runbook-0.1.md#core-schema-upgrade-and-rollback-ab-005) for local reproduction and retention.
 
 ## Reports, privacy, and retention
 

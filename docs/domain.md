@@ -4,6 +4,17 @@
 
 `Task.id` is the stable `work_id`. A Task points to its current immutable TaskSpecification and retains all earlier versions. Attempt has its own ID, references the exact specification and actor configuration used, snapshots the configuration, and owns zero or more Artifacts. Evidence belongs to an Artifact. Database constraints prevent cross-task specification/attempt drift.
 
+Revision `0002` binds each Attempt's specification, work, actor configuration, and `input_state_id`
+to one immutable specification tuple. `input_state_id` is the SHA-256 digest of canonical
+specification content. `(work_id, ownership_epoch)` is unique and positive on Attempts; the Task
+epoch begins at zero and increments when a start commits. Version numbers are positive and unique
+within their Task or Agent. Current-specification pointers cannot reference another Task's input.
+
+Database guards prevent rewriting/deleting specifications, configurations, or UUID-identified
+domain events, and freeze Attempt identity and snapshots while allowing runtime result/status
+updates. A failed event insertion rolls back its Attempt and epoch increment. Audit events do
+not store submitted instructions or credential values. See [ADR 0004](adr/0004-database-enforced-history.md).
+
 ## Task states
 
 `draft → ready → in_progress → awaiting_review → completed`

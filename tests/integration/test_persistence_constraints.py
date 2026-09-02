@@ -61,7 +61,7 @@ def test_attempt_cannot_reference_another_logical_task(
             work_id=other_task.id,
             task_specification_id=specification.id,
             agent_configuration_id=configuration.id,
-            input_state_id="input",
+            input_state_id=specification.content_hash,
             ownership_epoch=1,
             configuration_snapshot={},
         )

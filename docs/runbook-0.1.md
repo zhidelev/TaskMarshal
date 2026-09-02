@@ -48,6 +48,33 @@ database credentials. Keep real secrets out of `.env.example`, and never publish
 
 ## Retention and isolated verification
 
+### Core schema upgrade and rollback (AB-005)
+
+Stop application writers and back up existing data before running `uv run alembic upgrade head`
+(or letting Compose's migration service do so). Current head is `0002`; revision `0001` is unchanged.
+Run `uv run alembic current` and `uv run alembic check` afterward. SQLite needs an online,
+dedicated migration connection; the Alembic runner leaves FK enforcement off only on that
+connection for batch rebuilds, while application connections enforce it.
+
+`migration.identity_conflict` means existing Task/specification/configuration/input/epoch data is
+inconsistent; `migration.foreign_key_conflict` identifies broken SQLite references. The migration
+refuses to repair or discard that data. Investigate privately from the backup, resolve the
+inconsistency through an approved repair, then retry. Never paste database rows or credentials
+into logs. Percent-encoded credentials and connection options are supported in `DATABASE_URL`.
+
+`uv run alembic downgrade 0001` preserves rows but removes identity/history guards; keep writers
+stopped until re-upgraded. `downgrade base` drops all core tables and is only for disposable
+verification or an explicitly approved destructive reset. Append-only history has no row-purge
+API in 0.1, and cascaded parent deletion fails if it would remove protected history.
+
+`uv run pytest` runs migrated SQLite tests. For a disposable PostgreSQL server, also pass
+`--postgres-url=postgresql+psycopg://USER:PASSWORD@HOST:PORT/TEST_DB`; only use test credentials.
+Each test creates its own UUID-named schema and drops that schema in fixture cleanup. CI enables
+this path. Both databases run empty/full-chain forward/rollback tests, invalid-existing-data
+preflight tests, immutable-history checks, and API transaction rollback tests.
+
+### Retention
+
 Normal shutdown retains the named Postgres volume, including smoke fixtures, until the operator
 explicitly resets it. CI tears its stack and volume down even if log collection fails. Sanitized
 test/coverage summaries, allowlisted events, and job metrics expire after seven days. Raw reports

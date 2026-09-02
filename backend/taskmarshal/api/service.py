@@ -8,9 +8,10 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from taskmarshal.api.correlation import correlation_id_context
@@ -58,12 +59,19 @@ def observed_operation(
     try:
         yield
     except Exception as exc:
-        logger.exception(
+        reason_code = (
+            exc.code
+            if isinstance(exc, DomainError)
+            else "persistence.constraint_violation"
+            if isinstance(exc, IntegrityError)
+            else "operation.unhandled_failure"
+        )
+        logger.error(
             "operation.failure",
             extra={
                 **common,
                 "duration_ms": round((time.monotonic() - started) * 1000),
-                "reason_code": getattr(exc, "code", "operation.unhandled_failure"),
+                "reason_code": reason_code,
             },
         )
         raise
@@ -297,6 +305,11 @@ class ControlPlaneService:
         }
 
     def start_attempt(self, work_id: str) -> Attempt:
+        attempt_id = str(uuid4())
+        with observed_operation("attempt.start", work_id=work_id, attempt_id=attempt_id):
+            return self._start_attempt(work_id, attempt_id)
+
+    def _start_attempt(self, work_id: str, attempt_id: str) -> Attempt:
         task = self.get_task(work_id)
         report = self.readiness(work_id)
         failed = [item for item in report["requirements"] if not item["satisfied"]]
@@ -351,28 +364,28 @@ class ControlPlaneService:
                 "max_cost_usd",
             ),
         )
-        with observed_operation("attempt.start", work_id=work_id):
-            attempt = Attempt(
-                work_id=work_id,
-                task_specification_id=specification.id,
-                agent_configuration_id=configuration.id,
-                input_state_id=specification.content_hash,
-                ownership_epoch=task.ownership_epoch,
-                status=attempt_status,
-                configuration_snapshot=snapshot,
-            )
-            task.status = next_task_status
-            self.session.add(attempt)
-            self.session.flush()
-            self._event(
-                "attempt.started",
-                work_id,
-                attempt.id,
-                "attempt.manual_start",
-                {"input_state_id": attempt.input_state_id},
-            )
-            self.session.commit()
-            return attempt
+        attempt = Attempt(
+            id=attempt_id,
+            work_id=work_id,
+            task_specification_id=specification.id,
+            agent_configuration_id=configuration.id,
+            input_state_id=specification.content_hash,
+            ownership_epoch=task.ownership_epoch,
+            status=attempt_status,
+            configuration_snapshot=snapshot,
+        )
+        task.status = next_task_status
+        self.session.add(attempt)
+        self.session.flush()
+        self._event(
+            "attempt.started",
+            work_id,
+            attempt.id,
+            "attempt.manual_start",
+            {"input_state_id": attempt.input_state_id},
+        )
+        self.session.commit()
+        return attempt
 
     def _event(
         self,

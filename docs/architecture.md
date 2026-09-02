@@ -20,6 +20,11 @@ change domain state ownership or the public API.
 
 The control plane owns Tasks, immutable specification/configuration versions, readiness, attempts, artifacts, evidence, and domain events. An adapter returns structured observations; it does not own Task status. Attempts snapshot configuration and bind to exactly one `(task_specification_id, work_id)` pair through a composite foreign key.
 
+Revision `0002` extends that foreign key to include the actor configuration and input digest,
+constrains the Task's current-specification ownership, and freezes version/event history and
+Attempt identity with database guards. Migrations, not `create_all()`, define the deployable schema.
+See [ADR 0004](adr/0004-database-enforced-history.md) for rollback and retention consequences.
+
 `input_state_id` is the SHA-256 digest of canonical specification content. `ownership_epoch` increments at attempt start. Together they give later workflow code a stable basis for rejecting stale results.
 
 ## Protected ports
