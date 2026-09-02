@@ -1,4 +1,4 @@
-.PHONY: dev down status logs migrate worker test lint typecheck check smoke smoke-local dependency-check
+.PHONY: dev down status logs migrate worker test test-backend test-frontend lint typecheck check smoke smoke-local dependency-check migration-check
 
 COMPOSE ?= docker compose
 
@@ -20,8 +20,13 @@ migrate:
 worker:
 	uv run --extra worker python -m worker.main
 
-test:
+test: test-backend test-frontend
+
+test-backend:
 	uv run pytest --cov=taskmarshal --cov-report=term-missing --cov-report=xml
+
+test-frontend:
+	cd frontend && npm test
 
 lint:
 	uv run ruff check backend worker migrations tests scripts
@@ -35,7 +40,10 @@ typecheck:
 dependency-check:
 	uv run python scripts/check_dependencies.py
 
-check: lint typecheck dependency-check test
+check: lint typecheck dependency-check migration-check test
+
+migration-check:
+	uv run python scripts/check_migrations.py
 
 smoke:
 	$(COMPOSE) exec -T -e TASKMARSHAL_API_URL=http://api:8000 api python scripts/smoke.py

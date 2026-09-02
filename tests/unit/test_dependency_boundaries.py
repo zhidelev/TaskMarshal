@@ -59,6 +59,9 @@ def test_checker_rejects_prohibited_domain_imports(tmp_path: Path, module: str) 
         ("from azure.ai import inference", "azure.ai.inference"),
         ("from taskmarshal import persistence", "taskmarshal.persistence"),
         ("from google import *", "google.*"),
+        ("from .. import persistence", "taskmarshal.persistence"),
+        ("from ..adapters import temporal", "taskmarshal.adapters.temporal"),
+        ("from .. import *", "taskmarshal.*"),
     ],
 )
 def test_checker_reconstructs_nested_from_imports(
@@ -80,3 +83,18 @@ def test_checker_matches_module_boundaries_not_similar_names(tmp_path: Path) -> 
     (domain / "policy.py").write_text("import dockerish\n")
 
     assert run_checker(domain).returncode == 0
+
+
+def test_checker_resolves_relative_imports_in_nested_domain_modules(tmp_path: Path) -> None:
+    domain = tmp_path / "domain"
+    nested = domain / "policies"
+    nested.mkdir(parents=True)
+    module = nested / "policy.py"
+    module.write_text("from .. import ports\n")
+    assert run_checker(domain).returncode == 0
+    module.write_text("from ...persistence import tables\n")
+    assert run_checker(domain).returncode == 1
+
+
+def test_checker_fails_closed_if_domain_directory_is_missing(tmp_path: Path) -> None:
+    assert run_checker(tmp_path / "absent").returncode == 1

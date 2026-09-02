@@ -25,7 +25,8 @@ Create a Task without a specification and POST its attempts endpoint. It must re
 
 - `docker compose ps` distinguishes dependency startup from ready applications.
 - `docker compose logs api worker temporal db` shows structured API operations and dependency state. Match the `X-Correlation-ID` response header or `error.correlation_id` value to the `correlation_id` log field. Credential values and submitted prompt content are never logged by application code.
-- If a migration is missing, `uv run alembic check` exits non-zero.
+- If a migration is missing, `make migration-check` exits non-zero using a disposable database.
+  `uv run alembic check` checks the currently configured database without applying migrations.
 - If domain code imports infrastructure, `make dependency-check` names the file, line, and prohibited module.
 - Use `make down` for normal shutdown. Use `docker compose down --volumes` only when intentionally discarding local database state.
 
@@ -48,9 +49,11 @@ database credentials. Keep real secrets out of `.env.example`, and never publish
 ## Retention and isolated verification
 
 Normal shutdown retains the named Postgres volume, including smoke fixtures, until the operator
-explicitly resets it. CI tears its stack and volume down even if log collection fails. Test reports
-and Compose logs expire after seven days. Do not collect real prompts or credential values as
-evidence. Build caches contain no `.env` files, local databases, or logs.
+explicitly resets it. CI tears its stack and volume down even if log collection fails. Sanitized
+test/coverage summaries, allowlisted events, and job metrics expire after seven days. Raw reports
+and Compose logs are never uploaded; they disappear with the ephemeral runner. Do not collect
+real prompts or credential values as evidence. Build caches contain no `.env` files, local
+databases, or logs. See [CI quality gates](ci.md) for report policy and local reproduction.
 
 For an isolated test on a machine where the default ports are free, use
 `make dev smoke COMPOSE='docker compose -p taskmarshal-check'`. Clean up only that test project

@@ -852,6 +852,7 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 worker = [
@@ -869,6 +870,7 @@ requires-dist = [
     { name = "pydantic-ai-slim", specifier = "==0.8.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.4.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = "==6.2.1" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = "==6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.11" },
     { name = "sqlalchemy", specifier = "==2.0.43" },
     { name = "temporalio", marker = "extra == 'worker'", specifier = "==1.16.0" },
