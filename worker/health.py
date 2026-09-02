@@ -38,6 +38,10 @@ async def refresh_readiness(
             raise RuntimeError("Dependency is not serving")
         temporary.write_text(str(time.monotonic()))
         temporary.replace(path)
+    except asyncio.CancelledError:
+        path.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
+        raise
     except Exception:
         path.unlink(missing_ok=True)
         temporary.unlink(missing_ok=True)

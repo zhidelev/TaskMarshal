@@ -24,6 +24,31 @@ def test_worker_health_expires(tmp_path: Path) -> None:
     assert not is_ready(path)
 
 
+def test_worker_probe_cancellation_propagates_and_clears_readiness(tmp_path: Path) -> None:
+    path = tmp_path / "worker.ready"
+    temporary = path.with_suffix(".tmp")
+
+    async def scenario() -> None:
+        entered = asyncio.Event()
+
+        async def stalled() -> bool:
+            entered.set()
+            await asyncio.Event().wait()
+            return True
+
+        path.write_text(str(time.monotonic()))
+        temporary.write_text("partial marker")
+        task = asyncio.create_task(refresh_readiness(stalled, path))
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not path.exists()
+        assert not temporary.exists()
+
+    asyncio.run(scenario())
+
+
 def test_worker_readiness_fails_closed_and_recovers(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
