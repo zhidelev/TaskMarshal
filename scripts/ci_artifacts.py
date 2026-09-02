@@ -49,6 +49,16 @@ def number(value: object) -> float | None:
     return result if math.isfinite(result) and result >= 0 else None
 
 
+def positive_integer(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        result = int(value)
+    except ValueError:
+        return None
+    return result if result > 0 else None
+
+
 def sanitized_junit(source: Path, destination: Path) -> None:
     source_root = ET.parse(source).getroot()
     if source_root.tag not in {"testsuites", "testsuite"}:
@@ -166,7 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if started is not None
         else None,
         "cache_hit": {"true": True, "false": False}.get(cache),
-        "workflow_attempt": number(os.getenv("GITHUB_RUN_ATTEMPT")),
+        "workflow_attempt": positive_integer(os.getenv("GITHUB_RUN_ATTEMPT")),
         "flaky_rerun_count": 0,  # No automatic test retries; workflow reruns are separate.
         "reports": reports,
     }

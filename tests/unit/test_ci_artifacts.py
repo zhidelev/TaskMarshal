@@ -67,8 +67,47 @@ def test_metrics_allowlist_environment_and_distinguish_workflow_reruns(
     assert metrics["reason_code"] == "ci.job.failure"
     assert metrics["cache_hit"] is False
     assert metrics["workflow_attempt"] == 2
+    assert type(metrics["workflow_attempt"]) is int
     assert metrics["flaky_rerun_count"] == 0
     assert "credential-sentinel" not in json.dumps(metrics)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1", 1),
+        ("2", 2),
+        ("9007199254740993", 9007199254740993),
+        (None, None),
+        ("", None),
+        ("invalid", None),
+        ("2.0", None),
+        ("1.5", None),
+        ("1e2", None),
+        ("NaN", None),
+        ("Infinity", None),
+        ("0", None),
+        ("-1", None),
+    ],
+)
+def test_workflow_attempt_serializes_as_integer_or_null(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    value: str | None,
+    expected: int | None,
+) -> None:
+    if value is None:
+        monkeypatch.delenv("GITHUB_RUN_ATTEMPT", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_RUN_ATTEMPT", value)
+    output = tmp_path / "safe"
+    assert main(["--job", "backend-static", "--output", str(output)]) == 0
+    for payload in ((output / "job-metrics.json").read_text(), capsys.readouterr().out):
+        attempt = json.loads(payload)["workflow_attempt"]
+        assert attempt == expected
+        if expected is not None:
+            assert type(attempt) is int
 
 
 @pytest.mark.parametrize("report", ["<coverage/>", "<invalid/>", "not xml"])
