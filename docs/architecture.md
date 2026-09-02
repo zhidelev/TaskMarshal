@@ -22,6 +22,10 @@ The control plane owns Tasks, immutable specification/configuration versions, re
 - `SandboxProvider.prepare/destroy` isolates workspace implementations. The 0.1 implementation denies preparation by default because disposable execution belongs to milestone 0.2.
 - `WorkflowEngine.start_attempt` hides Temporal. Manual 0.1 start persists a running Attempt without granting execution authority.
 
+The development worker publishes readiness only after a successful Temporal health RPC. Its
+expiring readiness marker is local to the container's tmpfs and is not domain state or execution
+evidence. Compose waits for this check, API database readiness, and both UI HTTP checks.
+
 ## Failure semantics
 
 Readiness and adapter validation fail closed. API failures use `{ "error": { "code", "message", "details", "correlation_id" } }`. A validated `X-Correlation-ID` is propagated through response headers, errors, and structured request/operation logs. Validation failures expose schema locations but redact submitted values. Operations emit structured start/success/failure logs with stable reason codes, duration, and `work_id`/`attempt_id` when applicable. Consequential lifecycle events also receive immutable UUID identities in `domain_events`.

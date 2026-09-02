@@ -2,9 +2,9 @@
 
 ## Start and verify
 
-1. From a clean checkout, copy `.env.example` to `.env`. Values are local-only and contain no production secret.
-2. Run `make dev`. Compose starts Postgres, Temporal, migrations, API, worker, UI, and Temporal UI in dependency order.
-3. Run `make smoke`. The smoke scenario creates a Project, validated Repository, versioned Agent configuration, Task, TaskSpecification, readiness report, and distinct Attempt.
+1. Install Docker Engine with Compose v2 (supporting `--wait`) and Make. No host language runtime is needed.
+2. From a clean checkout, run `make dev`. Compose starts Postgres, Temporal, migrations, API, worker, UI, and Temporal UI in dependency order. Copy `.env.example` to `.env` only for overrides; all defaults are local-only.
+3. Run `make smoke`. It runs inside the API container, proves an unready task fails closed without an Attempt, then creates a Project, validated Repository, versioned Agent configuration, Task, TaskSpecification, readiness report, and distinct Attempt.
 4. Open the UI at <http://localhost:3000>. The API readiness probe is <http://localhost:8000/health/ready>.
 
 ## Manual demonstration
@@ -28,3 +28,32 @@ Create a Task without a specification and POST its attempts endpoint. It must re
 - If a migration is missing, `uv run alembic check` exits non-zero.
 - If domain code imports infrastructure, `make dependency-check` names the file, line, and prohibited module.
 - Use `make down` for normal shutdown. Use `docker compose down --volumes` only when intentionally discarding local database state.
+
+## Readiness and local-only configuration
+
+`make status` shows dependency health separately from application readiness. Postgres checks
+connection acceptance; Temporal checks its workflow service; migration must exit successfully
+before the API and worker start. API `/health/live` is process liveness while `/health/ready`
+requires a database query. Both UIs have HTTP checks. The worker becomes healthy only after its
+own Temporal client confirms service health. Failed or timed-out probes remove readiness; a
+marker older than 15 seconds also fails closed. Its marker lives on container tmpfs, never on the
+host. The worker still does not execute coding workflows in milestone 0.1.
+
+All host ports bind to `127.0.0.1`; none of these unauthenticated services should be exposed publicly.
+The public `taskmarshal-local-only` password is deliberately non-production. If overriding
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, or `POSTGRES_DB`, update `DATABASE_URL` consistently (URL-encode
+credentials). Initialization variables only apply to an empty volume; they do not rotate existing
+database credentials. Keep real secrets out of `.env.example`, and never publish the example stack.
+
+## Retention and isolated verification
+
+Normal shutdown retains the named Postgres volume, including smoke fixtures, until the operator
+explicitly resets it. CI tears its stack and volume down even if log collection fails. Test reports
+and Compose logs expire after seven days. Do not collect real prompts or credential values as
+evidence. Build caches contain no `.env` files, local databases, or logs.
+
+For an isolated test on a machine where the default ports are free, use
+`make dev smoke COMPOSE='docker compose -p taskmarshal-check'`. Clean up only that test project
+with `docker compose -p taskmarshal-check down --volumes --remove-orphans`. This does not remove the
+normal `taskmarshal` development volume. Local pytest scratch data follows pytest's bounded
+temporary-directory retention; build and coverage output remains ignored in the checkout.

@@ -47,6 +47,11 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   migrate:
     build:
@@ -86,6 +91,14 @@ services:
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker.health"]
+      interval: 3s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
     depends_on:
       temporal:
         condition: service_healthy
