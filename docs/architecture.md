@@ -39,6 +39,12 @@ evidence. Compose waits for this check, API database readiness, and both UI HTTP
 
 ## Failure semantics
 
+Readiness is an ordered set of composable, deterministic domain policies; it does not call an LLM.
+Every policy result remains visible, while Task readiness is the conjunction of those results. New
+authoritative input is appended as a TaskSpecification and invalidates prior readiness. Project
+ownership is checked at the API/service boundary and again by the readiness gate for persisted
+repository/dependency drift. See [ADR 0005](adr/0005-deterministic-readiness.md).
+
 Readiness and adapter validation fail closed. API failures use `{ "error": { "code", "message", "details", "correlation_id" } }`. A validated `X-Correlation-ID` is propagated through response headers, errors, and structured request/operation logs. Validation failures expose schema locations but redact submitted values. Operations emit structured start/success/failure logs with stable reason codes, duration, and `work_id`/`attempt_id` when applicable. Consequential lifecycle events also receive immutable UUID identities in `domain_events`.
 
 See ADRs [0001](adr/0001-modular-monolith-and-ports.md), [0002](adr/0002-control-plane-authority.md), and [0003](adr/0003-versioned-input-state.md).

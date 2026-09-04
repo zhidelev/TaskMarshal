@@ -89,6 +89,14 @@ def create_ready_task(client: TestClient) -> tuple[dict, dict, dict]:
     return task, specification, configuration
 
 
+def specification_command(specification: dict[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in specification.items()
+        if key not in {"id", "task_id", "version", "authored_at", "content_hash"}
+    }
+
+
 def test_milestone_scenario_creates_ready_task_and_distinct_attempt(
     client: TestClient, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -153,14 +161,17 @@ def test_new_versions_do_not_rewrite_attempt_inputs_or_history(
     )
     assert second_config.status_code == 201
     assert second_config.json()["version"] == 2
-    spec_command = {
-        key: value
-        for key, value in specification.items()
-        if key not in {"id", "task_id", "version", "authored_at", "content_hash"}
-    }
-    spec_command.update(actor_configuration_id=second_config.json()["id"], goal="Second goal")
+    spec_command = specification_command(specification)
+    spec_command.update(
+        actor_configuration_id=second_config.json()["id"],
+        goal="Second goal",
+        authored_by="editor@example.test",
+    )
     second_spec = client.post(f"/api/v1/tasks/{task['id']}/specifications", json=spec_command)
     assert second_spec.status_code == 201
+    assert second_spec.json()["authored_by"] == "editor@example.test"
+    assert second_spec.json()["authored_at"]
+    assert second_spec.json()["content_hash"] != specification["content_hash"]
     detail = client.get(f"/api/v1/tasks/{task['id']}").json()
     assert [item["version"] for item in detail["specification_history"]] == [1, 2]
     assert detail["current_specification"]["id"] == second_spec.json()["id"]
@@ -219,16 +230,146 @@ def test_unready_task_start_fails_closed_with_stable_requirements(client: TestCl
         "/api/v1/tasks", json={"project_id": project["id"], "title": "Not ready"}
     ).json()
 
+    gate_response = client.get(f"/api/v1/tasks/{task['id']}/readiness")
+    assert gate_response.status_code == 200
+    gate = gate_response.json()
+    assert gate["ready"] is False
+    assert gate["satisfied"] == 0
+    assert gate["total"] == 11
+    expected_codes = [
+        "repository.validated",
+        "base_revision.present",
+        "goal.present",
+        "acceptance_criteria.present",
+        "verification.present",
+        "actor.configured",
+        "reviewer.configured",
+        "limits.present",
+        "secrets.available",
+        "sandbox_policy.present",
+        "dependencies.completed",
+    ]
+    assert [item["code"] for item in gate["requirements"]] == expected_codes
+    assert all(not item["satisfied"] and item["remediation"] for item in gate["requirements"])
+
     response = client.post(f"/api/v1/tasks/{task['id']}/attempts")
 
     assert response.status_code == 409
     body = response.json()["error"]
     assert body["code"] == "task.not_ready"
-    assert {detail["code"] for detail in body["details"]} >= {
-        "repository.validated",
-        "verification.present",
-        "sandbox_policy.present",
-    }
+    assert [item["code"] for item in body["details"]] == expected_codes
     detail = client.get(f"/api/v1/tasks/{task['id']}").json()
     assert detail["task"]["status"] == "draft"
     assert detail["attempts"] == []
+
+
+def test_authoritative_edit_creates_version_and_rechecks_readiness(client: TestClient) -> None:
+    task, first_specification, _configuration = create_ready_task(client)
+    first_gate = client.get(f"/api/v1/tasks/{task['id']}/readiness")
+    assert first_gate.status_code == 200
+    assert first_gate.json()["ready"] is True
+    assert client.get(f"/api/v1/tasks/{task['id']}").json()["task"]["status"] == "ready"
+
+    command = specification_command(first_specification)
+    command.update(goal="Edited authoritative goal", authored_by="second-author")
+    response = client.post(f"/api/v1/tasks/{task['id']}/specifications", json=command)
+
+    assert response.status_code == 201, response.text
+    second = response.json()
+    assert second["id"] != first_specification["id"]
+    assert second["version"] == 2
+    assert second["authored_by"] == "second-author"
+    assert second["authored_at"]
+    assert second["content_hash"] != first_specification["content_hash"]
+    detail = client.get(f"/api/v1/tasks/{task['id']}").json()
+    assert detail["task"]["status"] == "draft"
+    assert detail["current_specification"]["id"] == second["id"]
+    assert [item["id"] for item in detail["specification_history"]] == [
+        first_specification["id"],
+        second["id"],
+    ]
+    reevaluated = client.get(f"/api/v1/tasks/{task['id']}/readiness")
+    assert reevaluated.status_code == 200
+    assert reevaluated.json()["ready"] is True
+
+
+def test_specification_rejects_cross_project_repository_and_dependency(
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    task, specification, _configuration = create_ready_task(client)
+    foreign_project = create_project(client, "Foreign project")
+    foreign_repository = client.post(
+        "/api/v1/repositories",
+        json={
+            "project_id": foreign_project["id"],
+            "name": "Foreign repo",
+            "url": "https://example.test/foreign.git",
+            "access_validated": True,
+        },
+    )
+    assert foreign_repository.status_code == 201
+    foreign_task = client.post(
+        "/api/v1/tasks",
+        json={"project_id": foreign_project["id"], "title": "Foreign dependency"},
+    )
+    assert foreign_task.status_code == 201
+
+    repository_command = specification_command(specification)
+    repository_command["repository_id"] = foreign_repository.json()["id"]
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        repository_response = client.post(
+            f"/api/v1/tasks/{task['id']}/specifications", json=repository_command
+        )
+    assert repository_response.status_code == 422
+    assert repository_response.json()["error"]["code"] == "repository.project_mismatch"
+    operations = [record for record in caplog.records if record.name == "taskmarshal.operations"]
+    assert [record.getMessage() for record in operations] == [
+        "operation.start",
+        "operation.failure",
+    ]
+    assert all(record.work_id == task["id"] for record in operations)
+    assert operations[-1].reason_code == "repository.project_mismatch"
+
+    dependency_command = specification_command(specification)
+    dependency_command["dependency_ids"] = [foreign_task.json()["id"]]
+    dependency_response = client.post(
+        f"/api/v1/tasks/{task['id']}/specifications", json=dependency_command
+    )
+    assert dependency_response.status_code == 422
+    assert dependency_response.json()["error"]["code"] == "dependency.project_mismatch"
+
+    detail = client.get(f"/api/v1/tasks/{task['id']}").json()
+    assert len(detail["specification_history"]) == 1
+
+
+def test_specification_rejects_unknown_and_malformed_authoritative_fields(
+    client: TestClient,
+) -> None:
+    task, specification, _configuration = create_ready_task(client)
+    command = specification_command(specification)
+    sentinel = "credential-value-must-not-escape"
+    command["content_hash"] = sentinel
+    command["acceptance_criteria"] = ["   "]
+    command["limits"] = {"timeout_seconds": True, "max_tokens": 100, "max_cost_usd": 1}
+    command["sandbox_policy"] = {
+        "network": "none",
+        "writable_paths": ["relative/path"],
+        "allow_external_mutation": False,
+    }
+
+    response = client.post(f"/api/v1/tasks/{task['id']}/specifications", json=command)
+
+    assert response.status_code == 422
+    body = response.json()["error"]
+    assert body["code"] == "request.validation_failed"
+    assert {tuple(item["location"]) for item in body["details"]} >= {
+        ("body", "content_hash"),
+        ("body", "acceptance_criteria"),
+        ("body", "limits", "timeout_seconds"),
+        ("body", "sandbox_policy", "writable_paths"),
+    }
+    assert sentinel not in response.text
+    detail = client.get(f"/api/v1/tasks/{task['id']}").json()
+    assert len(detail["specification_history"]) == 1

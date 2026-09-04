@@ -17,9 +17,20 @@
 6. Start the manual Attempt. Record that `work_id` and `attempt_id` differ and the Task is `in_progress`, not completed.
 7. Create the next specification version from the Task detail. Confirm history retains v1 and readiness is evaluated against v2.
 
+Each specification version must include repository and base revision, goal, acceptance criteria,
+verification commands, constraints, actor and reviewer configurations, execution limits, required
+secret references, sandbox policy, dependencies, and author. Saving an edit creates a new row and
+returns a previously ready Task to `draft`; open its readiness view to evaluate the new current
+version. Never copy `id`, `task_id`, `version`, `authored_at`, or `content_hash` into the create
+request—those are control-plane-owned response fields.
+
 ## Negative-path demonstration
 
 Create a Task without a specification and POST its attempts endpoint. It must return HTTP 409 `task.not_ready`, enumerate stable remediation codes, retain Task `draft`, and persist no Attempt.
+
+For a broader check, GET `/api/v1/tasks/{work_id}/readiness`: the response always contains all 11
+requirements and their remediation text. A cross-project repository or dependency is rejected at
+specification creation with `repository.project_mismatch` or `dependency.project_mismatch`.
 
 ## Troubleshooting
 
