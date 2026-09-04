@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal, Self
@@ -114,7 +115,16 @@ class Limits(BaseModel):
 
     timeout_seconds: int = Field(ge=1, le=86400, strict=True)
     max_tokens: int = Field(ge=1, strict=True)
-    max_cost_usd: float = Field(ge=0, allow_inf_nan=False, strict=True)
+    max_cost_usd: int | float = Field(ge=0)
+
+    @field_validator("max_cost_usd", mode="before")
+    @classmethod
+    def validate_max_cost(cls, value: object) -> object:
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError("maximum cost must be an integer or float")
+        if not math.isfinite(value):
+            raise ValueError("maximum cost must be finite")
+        return value
 
 
 class SandboxPolicy(BaseModel):
