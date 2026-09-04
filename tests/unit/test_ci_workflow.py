@@ -17,6 +17,13 @@ def test_ci_runs_fast_checks_and_an_independent_stack_on_pull_requests() -> None
         "unit",
         "integration",
     }
+    integration = next(
+        item
+        for item in jobs["backend-tests"]["strategy"]["matrix"]["include"]
+        if item["suite"] == "integration"
+    )
+    assert "--postgres-url=" in integration["database_args"]
+    assert jobs["backend-tests"]["services"]["postgres"]["image"] == "postgres:17.6-alpine"
 
 
 def test_ci_uploads_only_successfully_sanitized_reports_with_bounded_retention() -> None:

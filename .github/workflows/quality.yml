@@ -60,14 +60,28 @@ jobs:
     name: backend-${{ matrix.suite }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: taskmarshal
+          POSTGRES_PASSWORD: taskmarshal-ci-only
+          POSTGRES_DB: taskmarshal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskmarshal -d taskmarshal_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
     strategy:
       fail-fast: false
       matrix:
         include:
           - suite: unit
             paths: tests/unit
+            database_args: ""
           - suite: integration
             paths: tests/integration tests/e2e
+            database_args: --postgres-url=postgresql+psycopg://taskmarshal:taskmarshal-ci-only@localhost:5432/taskmarshal_test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -85,7 +99,7 @@ jobs:
       - run: uv sync --frozen --extra dev --extra worker
       - name: Run tests without automatic retries
         run: >-
-          uv run --no-sync pytest ${{ matrix.paths }}
+          uv run --no-sync pytest ${{ matrix.paths }} ${{ matrix.database_args }}
           --cov=taskmarshal --cov=worker --cov=scripts --cov-report=xml:coverage.xml
           --junitxml=junit.xml --show-capture=no --tb=short
       - name: Prepare allowlisted test reports and metrics

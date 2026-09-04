@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -88,7 +89,10 @@ class AgentConfiguration(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     agent: Mapped[Agent] = relationship(back_populates="configurations")
 
-    __table_args__ = (UniqueConstraint("agent_id", "version"),)
+    __table_args__ = (
+        UniqueConstraint("agent_id", "version"),
+        CheckConstraint("version > 0", name="ck_agent_configuration_version_positive"),
+    )
 
 
 class Task(Timestamped, Base):
@@ -99,10 +103,7 @@ class Task(Timestamped, Base):
     title: Mapped[str] = mapped_column(String(500))
     status: Mapped[str] = mapped_column(String(50), default="draft")
     ownership_epoch: Mapped[int] = mapped_column(Integer, default=0)
-    current_specification_id: Mapped[str | None] = mapped_column(
-        ForeignKey("task_specifications.id", name="fk_tasks_current_specification", use_alter=True),
-        nullable=True,
-    )
+    current_specification_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     specifications: Mapped[list[TaskSpecification]] = relationship(
         back_populates="task",
         foreign_keys="TaskSpecification.task_id",
@@ -111,6 +112,16 @@ class Task(Timestamped, Base):
     )
     attempts: Mapped[list[Attempt]] = relationship(
         back_populates="task", cascade="all, delete-orphan", order_by="Attempt.started_at"
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["current_specification_id", "id"],
+            ["task_specifications.id", "task_specifications.task_id"],
+            name="fk_tasks_current_specification_work",
+            use_alter=True,
+        ),
+        CheckConstraint("ownership_epoch >= 0", name="ck_task_epoch_nonnegative"),
     )
 
 
@@ -142,6 +153,14 @@ class TaskSpecification(Base):
     __table_args__ = (
         UniqueConstraint("task_id", "version"),
         UniqueConstraint("id", "task_id", name="uq_task_specification_identity_work"),
+        UniqueConstraint(
+            "id",
+            "task_id",
+            "actor_configuration_id",
+            "content_hash",
+            name="uq_task_specification_input_identity",
+        ),
+        CheckConstraint("version > 0", name="ck_task_specification_version_positive"),
     )
 
 
@@ -167,11 +186,19 @@ class Attempt(Base):
 
     __table_args__ = (
         ForeignKeyConstraint(
-            ["task_specification_id", "work_id"],
-            ["task_specifications.id", "task_specifications.task_id"],
-            name="fk_attempt_specification_work",
+            ["task_specification_id", "work_id", "agent_configuration_id", "input_state_id"],
+            [
+                "task_specifications.id",
+                "task_specifications.task_id",
+                "task_specifications.actor_configuration_id",
+                "task_specifications.content_hash",
+            ],
+            name="fk_attempt_input_identity",
         ),
         UniqueConstraint("id", "work_id", name="uq_attempt_identity_work"),
+        UniqueConstraint("work_id", "ownership_epoch", name="uq_attempt_work_epoch"),
+        CheckConstraint("ownership_epoch > 0", name="ck_attempt_epoch_positive"),
+        CheckConstraint("id <> work_id", name="ck_attempt_distinct_identity"),
         Index("ix_attempts_work_started", "work_id", "started_at"),
     )
 
