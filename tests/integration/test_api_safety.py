@@ -55,6 +55,7 @@ def test_correlation_id_is_propagated_to_errors_headers_and_logs(
         (
             "/api/v1/agents/example/configurations",
             {
+                "name": "Unsafe configuration",
                 "role_eligibility": ["actor"],
                 "model": "test:model",
                 "instructions": "sensitive-instructions-must-not-escape",

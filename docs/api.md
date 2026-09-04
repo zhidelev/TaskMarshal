@@ -3,6 +3,20 @@
 The interactive OpenAPI document is served at `/docs`. All failures use the redacted error envelope
 documented in [architecture](architecture.md), and every response carries `X-Correlation-ID`.
 
+## Versioned Agent configurations
+
+`POST /api/v1/agents/{agent_id}/configurations` appends an immutable configuration version. The
+request includes `name`, unique `role_eligibility` values, `adapter_type`, `provider`, `model`,
+`instructions`, `max_concurrency`, `timeout_seconds`, optional `max_cost_usd`, and `created_by`.
+Concurrency defaults to 1 and timeout to 1800 seconds. A null cost cap means the configuration adds
+no cap beyond the TaskSpecification's mandatory cost limit. Unknown fields, blank/control-bearing
+identity text, duplicate roles, booleans or strings in numeric fields, and non-finite costs are
+rejected using the redacted validation envelope.
+
+The control plane assigns `id`, the next per-Agent `version`, and `created_at`.
+`GET /api/v1/agent-configurations` returns all selectable immutable versions in Agent/version
+order. Creating a new version never rewrites an Attempt's configuration reference or snapshot.
+
 ## Versioned task specifications
 
 `POST /api/v1/tasks/{work_id}/specifications` appends an immutable version. The request owns these

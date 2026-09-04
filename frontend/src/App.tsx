@@ -146,6 +146,7 @@ export function App() {
 
   function agentConfigurationPayload(data: FormData) {
     return {
+      name: data.get("configuration_name"),
       role_eligibility: ["actor", "reviewer"],
       adapter_type: data.get("adapter_type") || "pydantic_ai",
       provider: data.get("provider"),
@@ -345,7 +346,7 @@ export function App() {
               <label>Acceptance criteria<textarea name="acceptance_criteria" placeholder="One criterion per line" required /></label>
               <label>Verification commands<textarea name="verification_commands" placeholder="pytest tests/unit" required /></label>
               <label>Constraints<textarea name="constraints" placeholder="One constraint per line" /></label>
-              <label>Agent configuration<select name="agent_configuration_id" required><option value="">Select…</option>{configurations.map((item) => <option key={item.id} value={item.id}>{agents.find((agent) => agent.id === item.agent_id)?.name ?? "Agent"} · v{item.version} · {item.model}</option>)}</select></label>
+              <label>Agent configuration<select name="agent_configuration_id" required><option value="">Select…</option>{configurations.map((item) => <option key={item.id} value={item.id}>{agents.find((agent) => agent.id === item.agent_id)?.name ?? "Agent"} · {item.name} · v{item.version} · {item.model}</option>)}</select></label>
               <div className="two"><label>Base revision<input name="base_revision" placeholder="commit SHA" required /></label><label>Author<input name="authored_by" defaultValue="operator" required /></label></div>
               <div className="three"><label>Timeout (s)<input type="number" name="timeout_seconds" defaultValue="1800" min="1" /></label><label>Max tokens<input type="number" name="max_tokens" defaultValue="100000" min="1" /></label><label>Max cost ($)<input type="number" name="max_cost_usd" defaultValue="10" min="0" step="0.01" /></label></div>
               <label>Required secret refs<textarea name="required_secret_refs" placeholder="References only; never secret values" /></label>
@@ -362,6 +363,7 @@ export function App() {
 
 function AgentFields() {
   return <>
+    <label>Configuration name<input name="configuration_name" defaultValue="Default" required /></label>
     <div className="two"><label>Adapter<select name="adapter_type"><option value="pydantic_ai">PydanticAI</option><option value="manual">Manual</option></select></label><label>Provider<input name="provider" defaultValue="openai" required /></label></div>
     <label>Model<input name="model" placeholder="openai:gpt-5" required /></label>
     <label>Instructions<textarea name="instructions" placeholder="System instructions" required /></label>

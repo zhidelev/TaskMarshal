@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from taskmarshal.domain.models import ActorResult, ExecutionPackage
+from taskmarshal.domain.models import AgentResult, ExecutionPackage
 
 
 class AdapterFailure(RuntimeError):
@@ -15,7 +15,7 @@ class AdapterFailure(RuntimeError):
 
 @runtime_checkable
 class AgentAdapter(Protocol):
-    async def execute(self, package: ExecutionPackage) -> ActorResult: ...
+    async def execute(self, package: ExecutionPackage) -> AgentResult: ...
 
 
 @runtime_checkable

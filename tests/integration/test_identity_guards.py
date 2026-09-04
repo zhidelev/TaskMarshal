@@ -113,6 +113,7 @@ def test_current_specification_cannot_cross_tasks(
 @pytest.mark.parametrize(
     ("model", "identity", "changes"),
     [
+        (AgentConfiguration, "configuration", {"name": "changed"}),
         (AgentConfiguration, "configuration", {"instructions": "changed"}),
         (TaskSpecification, "specification", {"goal": "changed"}),
         (DomainEvent, "event", {"id": "00000000-0000-0000-0000-000000000001"}),

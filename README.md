@@ -1,6 +1,6 @@
 # TaskMarshal
 
-TaskMarshal is a control plane for reliable coding-agent work. Milestone 0.1 provides the first complete operator path: configure a repository and versioned agent, create a logical task with an immutable specification, satisfy a deterministic readiness gate, and start a manually driven attempt.
+TaskMarshal is a control plane for reliable coding-agent work. Milestone 0.1 provides the first complete operator path: configure a repository and named, versioned agent policy, create a logical task with an immutable specification, satisfy a deterministic readiness gate, and start a manually driven attempt.
 
 The core invariant is deliberately visible throughout the code and UI:
 

@@ -42,6 +42,15 @@ def snapshot(engine: Engine) -> dict[str, list[dict[str, object]]]:
     return contents
 
 
+def without_configuration_names(
+    contents: dict[str, list[dict[str, object]]],
+) -> dict[str, list[dict[str, object]]]:
+    projected = {table: [dict(row) for row in rows] for table, rows in contents.items()}
+    for row in projected.get("agent_configurations", []):
+        row.pop("name", None)
+    return projected
+
+
 @pytest.mark.parametrize("populated", [False, True], ids=["empty", "full-chain"])
 def test_forward_and_rollback_preserve_existing_data(
     migration_config: Config, isolated_database_url: str, populated: bool
@@ -55,12 +64,17 @@ def test_forward_and_rollback_preserve_existing_data(
         original = snapshot(engine)
         command.upgrade(migration_config, "head")
         command.check(migration_config)
-        assert snapshot(engine) == original
+        upgraded = snapshot(engine)
+        assert without_configuration_names(upgraded) == original
+        if populated:
+            assert {row["name"] for row in upgraded["agent_configurations"]} == {
+                "Legacy configuration"
+            }
         command.downgrade(migration_config, "0001")
         assert snapshot(engine) == original
         command.upgrade(migration_config, "head")
         command.check(migration_config)
-        assert snapshot(engine) == original
+        assert without_configuration_names(snapshot(engine)) == original
         command.downgrade(migration_config, "base")
         assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
         command.upgrade(migration_config, "head")

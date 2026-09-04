@@ -25,6 +25,7 @@ def test_attempt_cannot_reference_another_logical_task(
         session.flush()
         configuration = AgentConfiguration(
             agent_id=agent.id,
+            name="Actor configuration",
             version=1,
             role_eligibility=["actor"],
             adapter_type="manual",

@@ -68,20 +68,60 @@ class AgentView(ORMModel):
 
 
 class AgentConfigurationCreate(BaseModel):
-    role_eligibility: list[Literal["actor", "reviewer"]] = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    role_eligibility: list[Literal["actor", "reviewer"]] = Field(min_length=1, max_length=2)
     adapter_type: Literal["pydantic_ai", "manual"] = "pydantic_ai"
     provider: str = Field(min_length=1, max_length=100)
     model: str = Field(min_length=1, max_length=300)
     instructions: str = Field(min_length=1, max_length=50000)
-    max_concurrency: int = Field(default=1, ge=1, le=100)
-    timeout_seconds: int = Field(default=1800, ge=1, le=86400)
-    max_cost_usd: float | None = Field(default=None, ge=0)
+    max_concurrency: int = Field(default=1, ge=1, le=100, strict=True)
+    timeout_seconds: int = Field(default=1800, ge=1, le=86400, strict=True)
+    max_cost_usd: int | float | None = Field(default=None, ge=0)
     created_by: str = Field(min_length=1, max_length=200)
+
+    @field_validator("name", "provider", "model", "created_by")
+    @classmethod
+    def validate_single_line_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must contain non-whitespace text")
+        if any(character in value for character in ("\n", "\r", "\x00")):
+            raise ValueError("value contains control characters")
+        return value
+
+    @field_validator("instructions")
+    @classmethod
+    def validate_instructions(cls, value: str) -> str:
+        if not value.strip() or "\x00" in value:
+            raise ValueError("instructions must contain valid text")
+        return value
+
+    @field_validator("role_eligibility")
+    @classmethod
+    def validate_roles(
+        cls, value: list[Literal["actor", "reviewer"]]
+    ) -> list[Literal["actor", "reviewer"]]:
+        if len(value) != len(set(value)):
+            raise ValueError("role eligibility values must be unique")
+        return value
+
+    @field_validator("max_cost_usd", mode="before")
+    @classmethod
+    def validate_cost_policy(cls, value: object) -> object:
+        if value is None:
+            return value
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError("cost cap must be an integer, float, or null")
+        if not math.isfinite(value):
+            raise ValueError("cost cap must be finite")
+        return value
 
 
 class AgentConfigurationView(ORMModel):
     id: str
     agent_id: str
+    name: str
     version: int
     role_eligibility: list[str]
     adapter_type: str
