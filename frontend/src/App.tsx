@@ -218,7 +218,14 @@ export function App() {
       verification_commands: splitLines(data.get("verification_commands")),
       authored_by: data.get("authored_by"),
     };
-    const { id: _id, version: _version, authored_at: _authoredAt, ...command } = payload;
+    const {
+      id: _id,
+      task_id: _taskId,
+      version: _version,
+      authored_at: _authoredAt,
+      content_hash: _contentHash,
+      ...command
+    } = payload;
     void run(async () => {
       await request<TaskSpecification>(`/api/v1/tasks/${selected.task.id}/specifications`, {
         method: "POST",

@@ -177,8 +177,20 @@ class ControlPlaneService:
     def create_task_specification(
         self, work_id: str, command: TaskSpecificationCreate
     ) -> TaskSpecification:
+        with observed_operation("task_specification.create", work_id=work_id):
+            return self._create_task_specification(work_id, command)
+
+    def _create_task_specification(
+        self, work_id: str, command: TaskSpecificationCreate
+    ) -> TaskSpecification:
         task = self.get_task(work_id)
-        self._require(Repository, command.repository_id, "repository.not_found")
+        repository = self._require(Repository, command.repository_id, "repository.not_found")
+        if repository.project_id != task.project_id:
+            raise DomainError(
+                422,
+                "repository.project_mismatch",
+                "The specification repository must belong to the task's project.",
+            )
         self._require(
             AgentConfiguration, command.actor_configuration_id, "actor_configuration.not_found"
         )
@@ -192,7 +204,13 @@ class ControlPlaneService:
                 raise DomainError(
                     422, "dependency.self_reference", "A task cannot depend on itself."
                 )
-            self._require(Task, dependency_id, "dependency.not_found")
+            dependency = self._require(Task, dependency_id, "dependency.not_found")
+            if dependency.project_id != task.project_id:
+                raise DomainError(
+                    422,
+                    "dependency.project_mismatch",
+                    "Every task dependency must belong to the task's project.",
+                )
         latest = self.session.scalar(
             select(func.max(TaskSpecification.version)).where(TaskSpecification.task_id == work_id)
         )
@@ -200,26 +218,25 @@ class ControlPlaneService:
         content_hash = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
-        with observed_operation("task_specification.create", work_id=work_id):
-            specification = TaskSpecification(
-                task_id=work_id,
-                version=(latest or 0) + 1,
-                content_hash=content_hash,
-                **payload,
-            )
-            self.session.add(specification)
-            self.session.flush()
-            task.current_specification_id = specification.id
-            if task.status in {TaskStatus.DRAFT, TaskStatus.READY}:
-                task.status = TaskStatus.DRAFT
-            self._event(
-                "task.specification.created",
-                work_id,
-                reason_code="task_specification.version_created",
-                payload={"specification_id": specification.id, "version": specification.version},
-            )
-            self.session.commit()
-            return specification
+        specification = TaskSpecification(
+            task_id=work_id,
+            version=(latest or 0) + 1,
+            content_hash=content_hash,
+            **payload,
+        )
+        self.session.add(specification)
+        self.session.flush()
+        task.current_specification_id = specification.id
+        if task.status in {TaskStatus.DRAFT, TaskStatus.READY}:
+            task.status = TaskStatus.DRAFT
+        self._event(
+            "task.specification.created",
+            work_id,
+            reason_code="task_specification.version_created",
+            payload={"specification_id": specification.id, "version": specification.version},
+        )
+        self.session.commit()
+        return specification
 
     def readiness(self, work_id: str, *, persist_status: bool = True) -> dict[str, Any]:
         task = self.get_task(work_id)
@@ -246,7 +263,14 @@ class ControlPlaneService:
             dependencies = self.session.scalars(
                 select(Task).where(Task.id.in_(specification.dependency_ids))
             )
-            status_by_id = {dependency.id: dependency.status for dependency in dependencies}
+            status_by_id = {
+                dependency.id: (
+                    dependency.status
+                    if dependency.project_id == task.project_id
+                    else "project_mismatch"
+                )
+                for dependency in dependencies
+            }
             dependency_statuses = [
                 status_by_id.get(dependency_id, "missing")
                 for dependency_id in specification.dependency_ids
@@ -254,7 +278,8 @@ class ControlPlaneService:
         report = evaluate_readiness(
             ReadinessContext(
                 work_id=UUID(work_id),
-                repository=self._as_dict(repository, ("url", "validated_at")),
+                task_project_id=task.project_id,
+                repository=self._as_dict(repository, ("project_id", "url", "validated_at")),
                 specification=self._as_dict(
                     specification,
                     (
@@ -265,6 +290,7 @@ class ControlPlaneService:
                         "limits",
                         "required_secret_refs",
                         "sandbox_policy",
+                        "dependency_ids",
                     ),
                 ),
                 actor_configuration=self._as_dict(actor, ("role_eligibility",)),

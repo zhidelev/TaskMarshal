@@ -27,6 +27,7 @@ export type Task = {
 };
 export type TaskSpecification = {
   id: string;
+  task_id: string;
   version: number;
   repository_id: string;
   goal: string;
@@ -42,6 +43,7 @@ export type TaskSpecification = {
   dependency_ids: string[];
   authored_by: string;
   authored_at: string;
+  content_hash: string;
 };
 export type Attempt = {
   id: string;

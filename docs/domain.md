@@ -28,6 +28,28 @@ Cancelled, failed, blocked, rejected, and retry paths stay explicit; no generic 
 
 ## Readiness requirements
 
-The API returns stable codes and remediation text for repository validation, base revision, goal, acceptance criteria, verification, actor, reviewer, limits, secrets, sandbox policy, and dependencies. All truth values are retained so the UI can show `x/y` without hiding which policy failed.
+Readiness is a deterministic conjunction of independently auditable policies. It never invokes a
+model or converts an LLM score into state. The API always returns all 11 truth values, stable codes,
+and remediation text so clients can show `satisfied/total` without hiding failures:
+
+| Code | Satisfied when |
+| --- | --- |
+| `repository.validated` | The repository belongs to the Task's Project, has a safe URL, and has a control-plane validation timestamp. |
+| `base_revision.present` | The current specification contains a non-blank immutable revision reference. |
+| `goal.present` | The current specification contains a non-blank goal. |
+| `acceptance_criteria.present` | At least one non-blank criterion is present. |
+| `verification.present` | At least one non-blank verification command is present. |
+| `actor.configured` | The immutable actor configuration exists and is actor-eligible. |
+| `reviewer.configured` | The immutable reviewer configuration exists and is reviewer-eligible. |
+| `limits.present` | Timeout, token, and finite non-negative cost limits have valid types and ranges. |
+| `secrets.available` | Every unique required secret reference is registered on the selected repository. Empty requirements are valid; secret values are never accepted here. |
+| `sandbox_policy.present` | Network mode is bounded, writable paths are unique and absolute, and external mutation is disabled. |
+| `dependencies.completed` | Every unique, same-project dependency exists and is `completed`; missing or mismatched dependencies fail closed. |
+
+Creating a specification always appends the next version with the supplied `authored_by` and a
+server timestamp, updates the Task's current pointer, and returns a ready Task to `draft` until the
+new version is evaluated. Server-generated identity, version, timestamp, and digest fields are
+rejected if replayed in a create request. Repository and dependency references cannot cross the
+Task's Project boundary.
 
 Repository access validation is an explicit control-plane assertion in 0.1. A production validator may later perform remote verification behind a dedicated adapter without changing the policy contract.

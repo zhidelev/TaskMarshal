@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from pathlib import PurePosixPath
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ORMModel(BaseModel):
@@ -109,38 +110,106 @@ class TaskView(ORMModel):
 
 
 class Limits(BaseModel):
-    timeout_seconds: int = Field(ge=1, le=86400)
-    max_tokens: int = Field(ge=1)
-    max_cost_usd: float = Field(ge=0)
+    model_config = ConfigDict(extra="forbid")
+
+    timeout_seconds: int = Field(ge=1, le=86400, strict=True)
+    max_tokens: int = Field(ge=1, strict=True)
+    max_cost_usd: float = Field(ge=0, allow_inf_nan=False, strict=True)
 
 
 class SandboxPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     network: Literal["none", "allowlist"] = "none"
-    writable_paths: list[str] = Field(default_factory=lambda: ["/workspace"])
+    writable_paths: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(
+        default_factory=lambda: ["/workspace"], min_length=1, max_length=32
+    )
     allow_external_mutation: Literal[False] = False
+
+    @field_validator("writable_paths")
+    @classmethod
+    def validate_writable_paths(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("writable paths must be unique")
+        for path in value:
+            parsed = PurePosixPath(path)
+            if not path.startswith("/") or ".." in parsed.parts:
+                raise ValueError("writable paths must be absolute and cannot traverse parents")
+            if any(character in path for character in ("\n", "\r", "\x00")):
+                raise ValueError("writable path contains control characters")
+        return value
 
 
 class TaskSpecificationCreate(BaseModel):
-    repository_id: str
+    model_config = ConfigDict(extra="forbid")
+
+    repository_id: str = Field(min_length=1, max_length=36)
     base_revision: str = Field(min_length=1, max_length=255)
     goal: str = Field(min_length=1, max_length=50000)
-    acceptance_criteria: list[str] = Field(min_length=1)
-    verification_commands: list[str] = Field(min_length=1)
-    constraints: list[str] = Field(default_factory=list)
-    actor_configuration_id: str
-    reviewer_configuration_id: str
+    acceptance_criteria: list[Annotated[str, Field(min_length=1, max_length=4000)]] = Field(
+        min_length=1, max_length=100
+    )
+    verification_commands: list[Annotated[str, Field(min_length=1, max_length=4000)]] = Field(
+        min_length=1, max_length=100
+    )
+    constraints: list[Annotated[str, Field(min_length=1, max_length=4000)]] = Field(
+        default_factory=list, max_length=100
+    )
+    actor_configuration_id: str = Field(min_length=1, max_length=36)
+    reviewer_configuration_id: str = Field(min_length=1, max_length=36)
     limits: Limits
-    required_secret_refs: list[str] = Field(default_factory=list)
+    required_secret_refs: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(
+        default_factory=list, max_length=100
+    )
     sandbox_policy: SandboxPolicy
-    dependency_ids: list[str] = Field(default_factory=list)
+    dependency_ids: list[Annotated[str, Field(min_length=1, max_length=36)]] = Field(
+        default_factory=list, max_length=100
+    )
     authored_by: str = Field(min_length=1, max_length=200)
 
-    @field_validator("base_revision", "goal", "authored_by")
+    @field_validator("base_revision", "authored_by")
     @classmethod
-    def reject_control_characters(cls, value: str) -> str:
+    def validate_single_line_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must contain non-whitespace text")
+        if any(character in value for character in ("\n", "\r", "\x00")):
+            raise ValueError("value contains control characters")
+        return value
+
+    @field_validator("goal")
+    @classmethod
+    def validate_goal(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must contain non-whitespace text")
         if "\x00" in value:
             raise ValueError("value contains a null byte")
         return value
+
+    @field_validator("acceptance_criteria", "verification_commands", "constraints")
+    @classmethod
+    def validate_text_items(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("items must contain non-whitespace text")
+        if any("\x00" in item for item in value):
+            raise ValueError("items cannot contain null bytes")
+        return value
+
+    @field_validator("required_secret_refs")
+    @classmethod
+    def validate_secret_references(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("secret references must contain non-whitespace text")
+        if any(character in item for item in value for character in ("\n", "\r", "\x00")):
+            raise ValueError("secret references cannot contain control characters")
+        if len(value) != len(set(value)):
+            raise ValueError("secret references must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_dependencies(self) -> Self:
+        if len(self.dependency_ids) != len(set(self.dependency_ids)):
+            raise ValueError("dependencies must be unique")
+        return self
 
 
 class TaskSpecificationView(ORMModel):
