@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: ${{ matrix.suite == 'integration' && 'postgres:17.6-alpine' || '' }}
+        image: postgres:17.6-alpine
         env:
           POSTGRES_USER: taskmarshal
           POSTGRES_PASSWORD: taskmarshal-ci-only
