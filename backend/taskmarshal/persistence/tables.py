@@ -76,6 +76,7 @@ class AgentConfiguration(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200), server_default="Legacy configuration")
     version: Mapped[int] = mapped_column(Integer)
     role_eligibility: Mapped[list[str]] = mapped_column(JSON)
     adapter_type: Mapped[str] = mapped_column(String(100))

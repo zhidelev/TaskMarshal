@@ -126,21 +126,26 @@ class ControlPlaneService:
     def create_agent_configuration(
         self, agent_id: str, command: AgentConfigurationCreate
     ) -> AgentConfiguration:
+        with observed_operation("agent_configuration.create"):
+            return self._create_agent_configuration(agent_id, command)
+
+    def _create_agent_configuration(
+        self, agent_id: str, command: AgentConfigurationCreate
+    ) -> AgentConfiguration:
         self._require(Agent, agent_id, "agent.not_found")
         latest = self.session.scalar(
             select(func.max(AgentConfiguration.version)).where(
                 AgentConfiguration.agent_id == agent_id
             )
         )
-        with observed_operation("agent_configuration.create"):
-            configuration = AgentConfiguration(
-                agent_id=agent_id,
-                version=(latest or 0) + 1,
-                **command.model_dump(),
-            )
-            self.session.add(configuration)
-            self.session.commit()
-            return configuration
+        configuration = AgentConfiguration(
+            agent_id=agent_id,
+            version=(latest or 0) + 1,
+            **command.model_dump(),
+        )
+        self.session.add(configuration)
+        self.session.commit()
+        return configuration
 
     def list_agent_configurations(self) -> list[AgentConfiguration]:
         return list(
@@ -379,6 +384,7 @@ class ControlPlaneService:
             configuration,
             (
                 "id",
+                "name",
                 "version",
                 "role_eligibility",
                 "adapter_type",

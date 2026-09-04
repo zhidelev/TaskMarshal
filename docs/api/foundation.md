@@ -20,10 +20,16 @@ An unready start returns HTTP 409 with code `task.not_ready`; `details` contains
 `Task.id` is `work_id`; `Attempt.id` is a separate `attempt_id`. The attempt response includes the
 exact specification/configuration IDs, `input_state_id`, and `ownership_epoch`. Appending a new
 specification/configuration never rewrites an existing Attempt or its persisted snapshot. Version
-and event history is append-only at the database boundary (revision `0002`); no update/delete API
-is provided for it. Attempt creation, its epoch increment, and the `attempt.started` domain event
+and event history is append-only at the database boundary (revision `0002`); revision `0003` adds a
+required, version-owned configuration name and backfills existing rows as `Legacy configuration`.
+No update/delete API is provided for history. Attempt creation, its epoch increment, and the `attempt.started` domain event
 commit together. If event persistence fails, the response is a redacted conflict and no Attempt
-or epoch increment survives. This revision changes enforcement, not the public response shape.
+or epoch increment survives.
+
+An Agent configuration create request contains `name`, unique actor/reviewer eligibility,
+adapter/provider/model selectors, instructions, concurrency and timeout policy, optional cost cap,
+and author. The response adds immutable identity, version, and timestamp fields. Configuration
+instructions and model/provider failures never appear in logs or errors.
 
 Every request receives a canonical UUID correlation identifier. Clients may supply one in
 `X-Correlation-ID`; missing or malformed values are replaced. The identifier is returned in the

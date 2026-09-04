@@ -58,6 +58,7 @@ class JsonFormatter(logging.Formatter):
             "operation",
             "work_id",
             "attempt_id",
+            "agent_role",
             "duration_ms",
             "reason_code",
         ):

@@ -11,7 +11,9 @@
 
 1. Create a Project.
 2. Configure a Repository. Use only a credential reference and assert access validation.
-3. Create an Agent; the UI creates configuration v1 eligible for actor and reviewer roles.
+3. Create an Agent and a named configuration v1. Confirm its role eligibility, adapter/model,
+   instructions, concurrency, timeout, and optional cost cap. Create v2 and confirm both selectable
+   versions remain listed.
 4. Create a Task and specification v1 with every required input.
 5. Open the Task. Confirm all readiness policies show satisfied.
 6. Start the manual Attempt. Record that `work_id` and `attempt_id` differ and the Task is `in_progress`, not completed.
@@ -59,10 +61,11 @@ database credentials. Keep real secrets out of `.env.example`, and never publish
 
 ## Retention and isolated verification
 
-### Core schema upgrade and rollback (AB-005)
+### Core schema upgrade and rollback (AB-005 through AB-007)
 
 Stop application writers and back up existing data before running `uv run alembic upgrade head`
-(or letting Compose's migration service do so). Current head is `0002`; revision `0001` is unchanged.
+(or letting Compose's migration service do so). Current head is `0003`; revisions `0001` and `0002`
+are unchanged.
 Run `uv run alembic current` and `uv run alembic check` afterward. SQLite needs an online,
 dedicated migration connection; the Alembic runner leaves FK enforcement off only on that
 connection for batch rebuilds, while application connections enforce it.
@@ -73,7 +76,8 @@ refuses to repair or discard that data. Investigate privately from the backup, r
 inconsistency through an approved repair, then retry. Never paste database rows or credentials
 into logs. Percent-encoded credentials and connection options are supported in `DATABASE_URL`.
 
-`uv run alembic downgrade 0001` preserves rows but removes identity/history guards; keep writers
+`uv run alembic downgrade 0002` removes Agent configuration names while retaining identity guards.
+`uv run alembic downgrade 0001` preserves the remaining rows but removes those guards; keep writers
 stopped until re-upgraded. `downgrade base` drops all core tables and is only for disposable
 verification or an explicitly approved destructive reset. Append-only history has no row-purge
 API in 0.1, and cascaded parent deletion fails if it would remove protected history.

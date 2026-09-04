@@ -11,11 +11,15 @@ export type Agent = { id: string; name: string; description: string };
 export type AgentConfiguration = {
   id: string;
   agent_id: string;
+  name: string;
   version: number;
   role_eligibility: string[];
+  adapter_type: "pydantic_ai" | "manual";
   provider: string;
   model: string;
   max_concurrency: number;
+  timeout_seconds: number;
+  max_cost_usd: number | null;
 };
 export type Task = {
   id: string;

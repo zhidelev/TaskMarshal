@@ -25,6 +25,7 @@ def create_agent_configuration(client: TestClient) -> dict[str, object]:
     response = client.post(
         f"/api/v1/agents/{agent['id']}/configurations",
         json={
+            "name": "Default actor/reviewer",
             "role_eligibility": ["actor", "reviewer"],
             "adapter_type": "pydantic_ai",
             "provider": "test",
@@ -97,6 +98,73 @@ def specification_command(specification: dict[str, object]) -> dict[str, object]
     }
 
 
+def test_agent_configurations_are_named_versioned_and_defaulted(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    agent = client.post(
+        "/api/v1/agents", json={"name": "Review specialist", "description": "Test"}
+    ).json()
+    first_command = {
+        "name": "Strict review",
+        "role_eligibility": ["reviewer"],
+        "adapter_type": "pydantic_ai",
+        "provider": "test",
+        "model": "test:reviewer",
+        "instructions": "Review without external mutation",
+        "created_by": "operator",
+    }
+    correlation_id = "89e6b1da-79a7-46b4-b587-2a3c1239d347"
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        first_response = client.post(
+            f"/api/v1/agents/{agent['id']}/configurations",
+            json=first_command,
+            headers={"X-Correlation-ID": correlation_id},
+        )
+
+    assert first_response.status_code == 201, first_response.text
+    first = first_response.json()
+    assert first["name"] == "Strict review"
+    assert first["version"] == 1
+    assert first["max_concurrency"] == 1
+    assert first["timeout_seconds"] == 1800
+    assert first["max_cost_usd"] is None
+    operations = [record for record in caplog.records if record.name == "taskmarshal.operations"]
+    assert [record.getMessage() for record in operations] == [
+        "operation.start",
+        "operation.success",
+    ]
+    assert all(record.correlation_id == correlation_id for record in operations)
+    assert str(first_command["instructions"]) not in caplog.text
+
+    second_command = {
+        **first_command,
+        "name": "Strict review with budget",
+        "max_concurrency": 2,
+        "timeout_seconds": 900,
+        "max_cost_usd": 2,
+        "created_by": "second-operator",
+    }
+    second_response = client.post(
+        f"/api/v1/agents/{agent['id']}/configurations", json=second_command
+    )
+    assert second_response.status_code == 201, second_response.text
+    second = second_response.json()
+    assert second["version"] == 2
+    assert second["name"] == "Strict review with budget"
+    assert second["max_cost_usd"] == 2
+
+    versions = [
+        configuration
+        for configuration in client.get("/api/v1/agent-configurations").json()
+        if configuration["agent_id"] == agent["id"]
+    ]
+    assert [(item["version"], item["name"]) for item in versions] == [
+        (1, "Strict review"),
+        (2, "Strict review with budget"),
+    ]
+
+
 def test_milestone_scenario_creates_ready_task_and_distinct_attempt(
     client: TestClient, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -149,6 +217,7 @@ def test_new_versions_do_not_rewrite_attempt_inputs_or_history(
         attempt = session.get(Attempt, first.json()["id"])
         assert attempt is not None
         original_snapshot = attempt.configuration_snapshot
+        assert original_snapshot["name"] == "Default actor/reviewer"
         original_events = list(session.scalars(select(DomainEvent.id)))
     config_command = {
         key: value

@@ -15,6 +15,21 @@ domain events, and freeze Attempt identity and snapshots while allowing runtime 
 updates. A failed event insertion rolls back its Attempt and epoch increment. Audit events do
 not store submitted instructions or credential values. See [ADR 0004](adr/0004-database-enforced-history.md).
 
+## Agent configurations and results
+
+`Agent` is a stable identity. Each `AgentConfiguration` is an immutable, named version containing
+role eligibility, adapter/provider/model selectors, instructions, concurrency, timeout, an optional
+configuration-level cost cap, author, and timestamp. A null configuration cost cap means no
+additional Agent-level cap; every TaskSpecification still supplies its required execution cost
+limit. Revision `0003` adds the version-owned name and assigns `Legacy configuration` to existing
+rows without rewriting their protected history.
+
+The provider-neutral `AgentAdapter` accepts an immutable `ExecutionPackage`. The package identifies
+the Task, Attempt, input state, ownership epoch, requested `AgentRole`, immutable task inputs, and a
+frozen `AgentConfigurationSnapshot`. An actor returns `ActorResult`; a reviewer returns
+`ReviewResult`; both contain validated `UsageMetadata`. Actor candidate claims and reviewer approval
+remain observations. Neither result can mutate or complete a Task without control-plane policy.
+
 ## Task states
 
 `draft → ready → in_progress → awaiting_review → completed`

@@ -68,6 +68,7 @@ def main() -> None:
     configuration = call(
         f"/api/v1/agents/{agent['id']}/configurations",
         {
+            "name": "Smoke actor/reviewer",
             "role_eligibility": ["actor", "reviewer"],
             "adapter_type": "manual",
             "provider": "manual",
